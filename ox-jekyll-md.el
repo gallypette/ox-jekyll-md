@@ -6,6 +6,7 @@
 ;; Author: Yoshinari Nomura <nom@quickhack.net>
 ;; Author: Justin Gordon <justin.gordon@gmail.com>
 ;; Keywords: org, jekyll
+;; Package-Version: 20180831.1732
 ;; Version: 0.1
 
 ;; This is free software; you can redistribute it and/or modify it
@@ -67,7 +68,6 @@ description: Instructions on Upgrading Octopress
   :group 'org-export-jekyll
   :type 'boolean)
 
-
 (defcustom org-jekyll-md-layout "post"
   "Default layout used in Jekyll article."
   :group 'org-export-jekyll
@@ -107,110 +107,22 @@ makes:
 ;;; Define Back-End
 
 (org-export-define-derived-backend 'jekyll 'md
-  :filters-alist '((:filter-parse-tree . org-jekyll-md-separate-elements))
   :menu-entry
   '(?j "Jekyll: export to Markdown with YAML front matter."
        ((?M "As Jekyll buffer" (lambda (a s v b) (org-jekyll-md-export-as-md a s v)))
         (?m "As Jekyll file" (lambda (a s v b) (org-jekyll-md-export-to-md a s v)))))
   :translate-alist
-  '((headline . org-jekyll-md-headline-offset)
-    (inner-template . org-jekyll-md-inner-template) ;; force body-only
-    (src-block . org-jekyll-md-src-block)
-    (table . org-jekyll-md-table)
-    (table-cell . org-jekyll-md-table-cell)
-    (table-row . org-jekyll-md-table-row)
+  '(
     (template . org-jekyll-md-template)) ;; add YAML front matter.
   :options-alist
   '((:jekyll-layout "JEKYLL_LAYOUT" nil org-jekyll-md-layout)
     (:jekyll-categories "JEKYLL_CATEGORIES" nil org-jekyll-md-categories)
     (:jekyll-tags "JEKYLL_TAGS" nil org-jekyll-md-tags)))
 
-
-;;; Headline
-;;; Keep the level as defined in original content
-;;; ** subtree => ## heading
-
-(defun org-jekyll-md-headline-offset (headline contents info)
-  "proper headline offset"
-  (let* ((info (plist-put info :headline-offset 0)))
-    (org-md-headline headline contents info)))
-
-
-;;; Internal Filters
-
-(defun org-jekyll-md-separate-elements (tree _backend info)
-  "Fix blank lines between elements.
-
-TREE is the parse tree being exported.  BACKEND is the export
-back-end used.  INFO is a plist used as a communication channel.
-
-Enforce a blank line between elements.  There are three exceptions
-to this rule:
-
-  1. Preserve blank lines between sibling items in a plain list.
-
-  2. In an item, remove any blank line before the very first
-     paragraph and the next sub-list when the latter ends the
-     current item.
-
-  3. Do not insert blank lines between table rows.
-
-Assume BACKEND is `jekyll'."
-  (org-element-map tree (remq 'item org-element-all-elements)
-    (lambda (e)
-      (org-element-put-property
-       e :post-blank
-       (if (and (eq (org-element-type e) 'paragraph)
-		(eq (org-element-type (org-element-property :parent e)) 'item)
-		(org-export-first-sibling-p e info)
-		(let ((next (org-export-get-next-element e info)))
-		  (and (eq (org-element-type next) 'plain-list)
-		       (not (org-export-get-next-element next info)))))
-	   0
-	 (if (eq (org-element-type e) 'table-row)
-             0
-           1)))))
-  ;; Return updated tree.
-  tree)
-
-(defun org-jekyll-md-src-block (src-block contents info)
-  "Optionally transcode SRC-BLOCK element into jekyll code template format.
-
-Use `highlight` / `endhighlight` if `org-jekyll-md-use-src-plugin` is t. Otherwise,
-perform `org-md-src-block`. CONTENTS holds the contents of the item. INFO is a
-plist used as a communication channel."
-  (if org-jekyll-md-use-src-plugin
-      (let ((language (org-element-property :language src-block))
-            (value (org-remove-indentation
-                    (org-element-property :value src-block))))
-        (format "{%% highlight %s %%}\n%s{%% endhighlight %%}"
-                language value))
-    (org-export-with-backend 'md src-block contents info)))
-
-(defun org-jekyll-md-table (table contents info)
-  "Empty transformation. Org tables should be valid kramdown syntax."
-  contents)
-
-(defun org-jekyll-md-table-cell (table-cell contents info)
-  "Empty transformation. Org tables should be valid kramdown syntax."
-  (if contents
-      (format "| %s " contents)
-    "| "))
-
-(defun org-jekyll-md-table-row (table-row contents info)
-  "Empty transformation. Org tables should be valid kramdown syntax."
-  (if contents
-      (format "%s|" contents)
-    (let* ((table (org-export-get-parent table-row))
-           (rc (org-export-table-dimensions table info)))
-      (concat (apply 'concat (make-list (cdr rc) "|---"))
-              (identity "|")))))
-
 ;;; Template
 
 (defun org-jekyll-md-template (contents info)
   "Return complete document string after MD conversion.
-
 CONTENTS is the transcoded contents string. INFO is a plist
 holding export options."
   (if org-jekyll-md-include-yaml-front-matter
@@ -219,21 +131,6 @@ holding export options."
        contents)
     contents
     ))
-
-(defun org-jekyll-md-inner-template (contents info)
-  "Return body of document string after MD conversion.
-
-CONTENTS is the transcoded contents string.  INFO is a plist
-holding export options."
-  (concat
-   ;; Table of contents.
-   (let ((depth (plist-get info :with-toc)))
-     (when depth (org-md--build-toc info (and (wholenump depth) depth))))
-   ;; Document contents.
-   contents
-   ;; Footnotes section.
-   (org-md--footnote-section info)))
-
 
 ;;; YAML Front Matter
 
@@ -290,7 +187,6 @@ holding export options."
   (if org-jekyll-md-use-todays-date
       (format-time-string "%F-")
     ""))
-
 
 ;;; End-User functions
 
